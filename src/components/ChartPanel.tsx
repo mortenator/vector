@@ -1,5 +1,7 @@
 import React, { useState } from "react";
 import { insertChart, ChartType } from "../utils/chartUtils";
+import { ChartData, createDefaultChartData } from "../types/chartData";
+import DataGrid from "./DataGrid";
 
 interface ChartPanelProps {
   isLoading: boolean;
@@ -60,12 +62,32 @@ const ChartPanel: React.FC<ChartPanelProps> = ({
   showMessage,
 }) => {
   const [selectedChart, setSelectedChart] = useState<ChartType>("bar");
+  const [chartData, setChartData] = useState<ChartData>(() =>
+    createDefaultChartData("bar")
+  );
+
+  const handleChartTypeChange = (type: ChartType) => {
+    setSelectedChart(type);
+    setChartData((prev) => ({ ...prev, type }));
+  };
+
+  const handleDataChange = (newData: ChartData) => {
+    setChartData(newData);
+  };
 
   const handleInsertChart = async () => {
     setIsLoading(true);
     try {
-      await insertChart(selectedChart);
-      showMessage(`${selectedChart.charAt(0).toUpperCase() + selectedChart.slice(1)} chart inserted!`);
+      // Update chart data with selected type and generate new ID
+      const dataToInsert: ChartData = {
+        ...chartData,
+        type: selectedChart,
+        id: `chart_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      };
+      await insertChart(selectedChart, dataToInsert);
+      showMessage(
+        `${selectedChart.charAt(0).toUpperCase() + selectedChart.slice(1)} chart inserted!`
+      );
     } catch (error) {
       console.error("Error inserting chart:", error);
       showMessage("Failed to insert chart. Please try again.");
@@ -74,8 +96,26 @@ const ChartPanel: React.FC<ChartPanelProps> = ({
     }
   };
 
+  const handleResetData = () => {
+    setChartData(createDefaultChartData(selectedChart));
+    showMessage("Data reset to defaults");
+  };
+
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
+      {/* Data Grid Editor */}
+      <section className="bg-white rounded-xl border border-gray-200 p-3 shadow-sm">
+        <DataGrid data={chartData} onChange={handleDataChange} />
+        <div className="mt-2 flex justify-end">
+          <button
+            onClick={handleResetData}
+            className="text-xs text-gray-500 hover:text-gray-700 underline"
+          >
+            Reset to defaults
+          </button>
+        </div>
+      </section>
+
       {/* Chart Type Selection */}
       <section>
         <h2 className="text-sm font-semibold text-gray-700 mb-3">
@@ -85,7 +125,7 @@ const ChartPanel: React.FC<ChartPanelProps> = ({
           {chartTypes.map(({ type, label, icon }) => (
             <button
               key={type}
-              onClick={() => setSelectedChart(type)}
+              onClick={() => handleChartTypeChange(type)}
               className={`
                 flex flex-col items-center justify-center p-4 rounded-xl border-2 transition-all duration-200
                 ${
@@ -151,8 +191,9 @@ const ChartPanel: React.FC<ChartPanelProps> = ({
       {/* Help Text */}
       <section className="bg-amber-50 border border-amber-200 rounded-lg p-3">
         <p className="text-xs text-amber-800">
-          <strong>Tip:</strong> Select a chart type above and click "Insert Chart" to add it to the current slide.
-          Charts can be edited after insertion.
+          <strong>Tip:</strong> Edit the data in the grid above, select a chart
+          type, and click "Insert Chart" to add it to the current slide. You can
+          import data from Excel using the "Import Excel" button.
         </p>
       </section>
     </div>
