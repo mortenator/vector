@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="utf-8"?>
+<customUI xmlns="http://schemas.microsoft.com/office/2009/07/customui">
+  <ribbon>
+    <tabs>
+      <tab id="tabVector" label="Vector" insertBeforeMso="TabHome">
+        <group id="grpCharts" label="Charts">
+          <button id="btnBarChart" label="Bar" size="large"
+                  imageMso="ChartTypeBarClustered"
+                  onAction="InsertBarChart"/>
+          <button id="btnColumnChart" label="Column" size="large"
+                  imageMso="ChartTypeColumnClustered"
+                  onAction="InsertColumnChart"/>
+          <button id="btnLineChart" label="Line" size="large"
+                  imageMso="ChartTypeLine"
+                  onAction="InsertLineChart"/>
+          <button id="btnPieChart" label="Pie" size="large"
+                  imageMso="ChartTypePie"
+                  onAction="InsertPieChart"/>
+        </group>
+        <group id="grpAdvanced" label="Advanced Charts">
+          <button id="btnAreaChart" label="Area" size="large"
+                  imageMso="ChartTypeArea"
+                  onAction="InsertAreaChart"/>
+          <button id="btnScatterChart" label="Scatter" size="large"
+                  imageMso="ChartTypeXYScatter"
+                  onAction="InsertScatterChart"/>
+          <button id="btnComboChart" label="Combo" size="large"
+                  imageMso="ChartTypeColumnLine"
+                  onAction="InsertComboChart"/>
+        </group>
+        <group id="grpTools" label="Tools">
+          <button id="btnRefreshData" label="Refresh" size="large"
+                  imageMso="Refresh"
+                  onAction="RefreshChartData"/>
+          <button id="btnAbout" label="About" size="normal"
+                  imageMso="Info"
+                  onAction="ShowAbout"/>
+        </group>
+      </tab>
+    </tabs>
+  </ribbon>
+</customUI>
