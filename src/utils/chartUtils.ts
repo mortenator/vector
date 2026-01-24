@@ -1,10 +1,23 @@
 /* global PowerPoint */
 
 import { ChartData, ChartType } from "../types/chartData";
-import { saveChartDataToShape, saveChartToSettings } from "./dataStorage";
+import {
+  VectorChart,
+  VectorChartType,
+  createVectorChart,
+  DEFAULT_COLORS,
+} from "../types/vectorChart";
+import {
+  saveChartDataToShape,
+  saveChartToSettings,
+  saveChartPersistent,
+  tagShapeWithChartId,
+} from "./dataStorage";
+import { renderChart, RenderResult } from "../rendering/pipeline";
 
 // Re-export ChartType for backwards compatibility
 export type { ChartType } from "../types/chartData";
+export type { VectorChartType } from "../types/vectorChart";
 
 /**
  * Inserts a chart into the current PowerPoint slide
@@ -433,4 +446,94 @@ export async function getSelectionInfo(): Promise<string> {
 
     return `Selected ${selection.items.length} slide(s)`;
   });
+}
+
+// ============================================================================
+// NEW: VectorChart-based rendering (Phase 2)
+// ============================================================================
+
+/**
+ * Convert legacy ChartData to VectorChart
+ */
+export function chartDataToVectorChart(
+  data: ChartData,
+  type?: VectorChartType
+): VectorChart {
+  const chartType: VectorChartType =
+    type || (data.type as VectorChartType) || "column";
+
+  // Build the data array for createVectorChart
+  const dataArray: (string | number | null)[][] = [];
+
+  // Header row with categories
+  dataArray.push([null, ...data.categories]);
+
+  // Data rows with series
+  data.series.forEach((series) => {
+    dataArray.push([series.name, ...series.values]);
+  });
+
+  const chart = createVectorChart(chartType, dataArray);
+
+  // Preserve the original ID
+  chart.id = data.id;
+
+  return chart;
+}
+
+/**
+ * Convert VectorChart back to legacy ChartData
+ */
+export function vectorChartToChartData(chart: VectorChart): ChartData {
+  return {
+    id: chart.id,
+    type: chart.type as ChartType,
+    categories: chart.categories.map((c) => c.label),
+    series: chart.series.map((s) => ({
+      name: s.label,
+      values: s.dataPoints.map((p) => p.value ?? 0),
+    })),
+  };
+}
+
+/**
+ * Insert a VectorChart using the new rendering pipeline
+ */
+export async function insertVectorChart(chart: VectorChart): Promise<void> {
+  return PowerPoint.run(async (context) => {
+    const slides = context.presentation.slides;
+    slides.load("items");
+    await context.sync();
+
+    if (slides.items.length === 0) {
+      throw new Error("No slides in presentation");
+    }
+
+    const slide = slides.items[0];
+    const shapes = slide.shapes;
+
+    // Render using new pipeline
+    const result: RenderResult = await renderChart(shapes, chart);
+
+    // Tag the background shape with chart ID
+    if (result.backgroundShape) {
+      await tagShapeWithChartId(result.backgroundShape, chart.id);
+    }
+
+    // Persist chart data
+    await saveChartPersistent(vectorChartToChartData(chart));
+
+    await context.sync();
+  });
+}
+
+/**
+ * Insert chart using new pipeline (backward compatible wrapper)
+ */
+export async function insertChartV2(
+  chartType: ChartType,
+  data: ChartData
+): Promise<void> {
+  const vectorChart = chartDataToVectorChart(data, chartType as VectorChartType);
+  return insertVectorChart(vectorChart);
 }
