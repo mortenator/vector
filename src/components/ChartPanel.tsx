@@ -17,6 +17,7 @@ import DataGrid from "./DataGrid";
 import { AxisConfiguration } from "./AxisPanel";
 import LabelSettings from "./LabelSettings";
 import AnnotationPanel from "./AnnotationPanel";
+import { ThemeSelector } from "./ThemePanel";
 
 interface ChartPanelProps {
   isLoading: boolean;
@@ -83,6 +84,25 @@ const chartTypes: { type: ChartType; label: string; icon: JSX.Element }[] = [
       </svg>
     ),
   },
+  {
+    type: "waterfall",
+    label: "Waterfall",
+    icon: (
+      <svg className="w-8 h-8" fill="currentColor" viewBox="0 0 24 24">
+        {/* Rising bar from bottom */}
+        <rect x="3" y="14" width="3" height="6" fill="#10b981" />
+        {/* Floating bar (positive) */}
+        <rect x="8" y="10" width="3" height="4" fill="#10b981" />
+        {/* Floating bar (negative) */}
+        <rect x="13" y="12" width="3" height="4" fill="#ef4444" />
+        {/* Final total bar */}
+        <rect x="18" y="8" width="3" height="12" fill="#3b82f6" />
+        {/* Connector lines */}
+        <rect x="6" y="13.5" width="2" height="1" fill="#9ca3af" />
+        <rect x="11" y="11.5" width="2" height="1" fill="#9ca3af" />
+      </svg>
+    ),
+  },
 ];
 
 const ChartPanel: React.FC<ChartPanelProps> = ({
@@ -104,6 +124,7 @@ const ChartPanel: React.FC<ChartPanelProps> = ({
   ]);
   const [labelConfig, setLabelConfig] = useState<LabelConfig>(defaultLabelConfig);
   const [annotations, setAnnotations] = useState<SimpleAnnotation[]>([]);
+  const [themeId, setThemeId] = useState<string>("colorful");
   const [showAxisConfig, setShowAxisConfig] = useState(false);
   const [showLabelConfig, setShowLabelConfig] = useState(false);
   const [showAnnotations, setShowAnnotations] = useState(false);
@@ -120,7 +141,14 @@ const ChartPanel: React.FC<ChartPanelProps> = ({
 
   const handleChartTypeChange = (type: ChartType) => {
     setSelectedChartType(type);
-    setChartData((prev) => ({ ...prev, type }));
+    // If switching to/from waterfall, reset to appropriate default data
+    if (type === "waterfall" && chartData.type !== "waterfall") {
+      setChartData(createDefaultChartData("waterfall"));
+    } else if (type !== "waterfall" && chartData.type === "waterfall") {
+      setChartData(createDefaultChartData(type));
+    } else {
+      setChartData((prev) => ({ ...prev, type }));
+    }
   };
 
   const handleDataChange = (newData: ChartData) => {
@@ -144,10 +172,11 @@ const ChartPanel: React.FC<ChartPanelProps> = ({
       );
       vectorChart.axes = axes;
 
-      // Use new rendering pipeline with VectorChart, labels, and annotations
+      // Use new rendering pipeline with VectorChart, labels, annotations, and theme
       await insertVectorChartWithOptions(vectorChart, {
         labelConfig,
         annotations,
+        themeId,
       });
 
       showMessage(
@@ -243,6 +272,11 @@ const ChartPanel: React.FC<ChartPanelProps> = ({
             </button>
           ))}
         </div>
+      </section>
+
+      {/* Theme Selector */}
+      <section className="bg-white rounded-xl border border-gray-200 p-3 shadow-sm">
+        <ThemeSelector selectedThemeId={themeId} onChange={setThemeId} />
       </section>
 
       {/* Axis Configuration (collapsible) */}

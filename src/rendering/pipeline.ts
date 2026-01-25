@@ -15,6 +15,12 @@ import {
   DEFAULT_COLORS,
 } from "../types/vectorChart";
 import {
+  VectorTheme,
+  getDefaultTheme,
+  getThemeById,
+  getSeriesColor,
+} from "../types/theme";
+import {
   ChartLayout,
   calculateLayout,
   createLinearScale,
@@ -26,6 +32,13 @@ import {
 import { generateAxisShapes } from "./axes";
 import { generateDataLabels, LabelConfig, defaultLabelConfig } from "./labelPlacement";
 import { generateAnnotationShapes, SimpleAnnotation } from "./annotations";
+import {
+  generateWaterfallShapes,
+  generateWaterfallLabels,
+  calculateWaterfallRange,
+  WaterfallColors,
+  defaultWaterfallColors,
+} from "./waterfall";
 
 // ============================================================================
 // Shape Descriptors
@@ -82,19 +95,30 @@ export function calculateScales(
   chart: VectorChart,
   layout: ChartLayout
 ): ChartScales {
-  // Get all values for y-axis scaling
-  const allValues = chart.series.flatMap((s) =>
-    s.dataPoints.map((p) => p.value ?? 0)
-  );
-
   // Find axis config if present
   const yAxis = chart.axes.find((a) => a.orientation === "y");
 
-  const [yMin, yMax] = calculateValueRange(allValues, {
-    minValue: yAxis?.minValue,
-    maxValue: yAxis?.maxValue,
-    includeZero: true,
-  });
+  let yMin: number;
+  let yMax: number;
+
+  if (chart.type === "waterfall") {
+    // Waterfall charts need special range calculation for running totals
+    [yMin, yMax] = calculateWaterfallRange(chart);
+  } else {
+    // Standard charts - get all values for y-axis scaling
+    const allValues = chart.series.flatMap((s) =>
+      s.dataPoints.map((p) => p.value ?? 0)
+    );
+    [yMin, yMax] = calculateValueRange(allValues, {
+      minValue: yAxis?.minValue,
+      maxValue: yAxis?.maxValue,
+      includeZero: true,
+    });
+  }
+
+  // Apply axis overrides if present
+  if (yAxis?.minValue != null) yMin = yAxis.minValue;
+  if (yAxis?.maxValue != null) yMax = yAxis.maxValue;
 
   // Category scale (x-axis)
   const categoryLabels = chart.categories.map((c) => c.label);
@@ -171,6 +195,10 @@ export function generateShapeDescriptors(
     case "line":
       shapes.push(...generateLineShapes(chart, layout, scales));
       break;
+    case "waterfall":
+      shapes.push(...generateWaterfallShapes(chart, layout, scales));
+      shapes.push(...generateWaterfallLabels(chart, layout, scales));
+      break;
     default:
       shapes.push(...generateBarShapes(chart, layout, scales, false));
   }
@@ -206,11 +234,12 @@ export function generateShapeDescriptorsWithLabels(
 }
 
 /**
- * Render options including labels and annotations
+ * Render options including labels, annotations, and theme
  */
 export interface RenderOptions {
   labelConfig?: LabelConfig;
   annotations?: SimpleAnnotation[];
+  themeId?: string;
 }
 
 /**
@@ -222,7 +251,14 @@ export function generateShapeDescriptorsWithOptions(
   scales: ChartScales,
   options: RenderOptions
 ): ShapeDescriptor[] {
-  const shapes = generateShapeDescriptors(chart, layout, scales);
+  // Get theme (from options or chart or default)
+  const theme = options.themeId
+    ? getThemeById(options.themeId) || getDefaultTheme()
+    : chart.themeId
+      ? getThemeById(chart.themeId) || getDefaultTheme()
+      : getDefaultTheme();
+
+  const shapes = generateShapeDescriptorsWithTheme(chart, layout, scales, theme);
 
   // Add data labels if enabled
   if (options.labelConfig?.showLabels) {
@@ -238,7 +274,258 @@ export function generateShapeDescriptorsWithOptions(
 }
 
 /**
- * Generate bar/column chart shapes
+ * Generate shape descriptors with theme applied
+ */
+function generateShapeDescriptorsWithTheme(
+  chart: VectorChart,
+  layout: ChartLayout,
+  scales: ChartScales,
+  theme: VectorTheme
+): ShapeDescriptor[] {
+  const shapes: ShapeDescriptor[] = [];
+
+  // Background with theme colors
+  shapes.push({
+    id: `${chart.id}_bg`,
+    type: "rectangle",
+    left: layout.outer.left,
+    top: layout.outer.top,
+    width: layout.outer.width,
+    height: layout.outer.height,
+    fill: theme.colors.background,
+    stroke: theme.styles.showChartBorder ? theme.colors.axis : theme.colors.background,
+    strokeWidth: theme.styles.showChartBorder ? 1 : 0,
+    chartId: chart.id,
+    layer: "background",
+  });
+
+  // Title
+  if (layout.title) {
+    const titleText = getTitleForChartType(chart.type);
+    shapes.push({
+      id: `${chart.id}_title`,
+      type: "textbox",
+      ...layout.title,
+      text: titleText,
+      fontSize: theme.fonts.titleSize,
+      fontBold: true,
+      textAlign: "center",
+      layer: "label",
+    });
+  }
+
+  // Axes (with theme grid settings)
+  shapes.push(...generateAxisShapes(chart, layout, scales, {
+    showGridLines: theme.styles.showGridLines,
+    gridLineColor: theme.colors.axis,
+    axisLineColor: theme.colors.axis,
+    tickLabelFontSize: theme.fonts.tickSize,
+  }));
+
+  // Generate data shapes based on chart type with theme colors
+  switch (chart.type) {
+    case "bar":
+      shapes.push(...generateThemedBarShapes(chart, layout, scales, theme, true));
+      break;
+    case "column":
+      shapes.push(...generateThemedBarShapes(chart, layout, scales, theme, false));
+      break;
+    case "line":
+      shapes.push(...generateThemedLineShapes(chart, layout, scales, theme));
+      break;
+    case "waterfall":
+      shapes.push(...generateWaterfallShapes(chart, layout, scales, {
+        positive: theme.colors.positive,
+        negative: theme.colors.negative,
+        total: theme.colors.total,
+        subtotal: theme.colors.axis,
+        connector: theme.colors.axis,
+      }));
+      shapes.push(...generateWaterfallLabels(chart, layout, scales));
+      break;
+    default:
+      shapes.push(...generateThemedBarShapes(chart, layout, scales, theme, false));
+  }
+
+  // Category labels
+  shapes.push(...generateCategoryLabels(chart, layout, scales));
+
+  // Legend with theme colors
+  if (layout.legend) {
+    shapes.push(...generateThemedLegend(chart, layout, theme));
+  }
+
+  return shapes;
+}
+
+/**
+ * Generate themed bar/column chart shapes
+ */
+function generateThemedBarShapes(
+  chart: VectorChart,
+  layout: ChartLayout,
+  scales: ChartScales,
+  theme: VectorTheme,
+  horizontal: boolean
+): ShapeDescriptor[] {
+  const shapes: ShapeDescriptor[] = [];
+  const numSeries = chart.series.length;
+
+  if (horizontal) {
+    const groupHeight = layout.plot.height / chart.categories.length;
+    const barHeight = (groupHeight * theme.styles.barWidthRatio) / numSeries;
+    const yMin = scales.y.domain[0];
+    const yMax = scales.y.domain[1];
+    const valueRange = yMax - yMin;
+
+    chart.series.forEach((series, seriesIndex) => {
+      const color = getSeriesColor(theme, seriesIndex);
+      series.dataPoints.forEach((point, catIndex) => {
+        const value = point.value ?? 0;
+        const barWidth = (value / valueRange) * layout.plot.width * 0.85;
+
+        shapes.push({
+          id: `${chart.id}_bar_${seriesIndex}_${catIndex}`,
+          type: "rectangle",
+          left: layout.plot.left,
+          top:
+            layout.plot.top +
+            catIndex * groupHeight +
+            seriesIndex * barHeight +
+            groupHeight * ((1 - theme.styles.barWidthRatio) / 2),
+          width: Math.max(barWidth, 1),
+          height: barHeight - 2,
+          fill: color,
+          stroke: color,
+          elementTag: `bar:${seriesIndex}:${catIndex}`,
+          chartId: chart.id,
+          layer: "data",
+        });
+      });
+    });
+  } else {
+    const bandwidth = scales.x.bandwidth;
+    const barWidth = (bandwidth * theme.styles.barWidthRatio) / numSeries;
+    const zeroY = scales.y.scale(0);
+
+    chart.series.forEach((series, seriesIndex) => {
+      const color = getSeriesColor(theme, seriesIndex);
+      series.dataPoints.forEach((point, catIndex) => {
+        const category = chart.categories[catIndex];
+        const value = point.value ?? 0;
+        const x = scales.x.scale(category.label) + seriesIndex * barWidth + bandwidth * ((1 - theme.styles.barWidthRatio) / 2);
+        const valueY = scales.y.scale(value);
+        const barHeight = Math.abs(zeroY - valueY);
+        const barTop = value >= 0 ? valueY : zeroY;
+
+        shapes.push({
+          id: `${chart.id}_bar_${seriesIndex}_${catIndex}`,
+          type: "rectangle",
+          left: x,
+          top: barTop,
+          width: barWidth - 2,
+          height: Math.max(barHeight, 1),
+          fill: color,
+          stroke: color,
+          elementTag: `bar:${seriesIndex}:${catIndex}`,
+          chartId: chart.id,
+          layer: "data",
+        });
+      });
+    });
+  }
+
+  return shapes;
+}
+
+/**
+ * Generate themed line chart shapes
+ */
+function generateThemedLineShapes(
+  chart: VectorChart,
+  layout: ChartLayout,
+  scales: ChartScales,
+  theme: VectorTheme
+): ShapeDescriptor[] {
+  const shapes: ShapeDescriptor[] = [];
+  const pointSize = theme.styles.pointSize;
+
+  chart.series.forEach((series, seriesIndex) => {
+    const color = getSeriesColor(theme, seriesIndex);
+    series.dataPoints.forEach((point, catIndex) => {
+      const category = chart.categories[catIndex];
+      const value = point.value ?? 0;
+      const x = scales.x.center(category.label);
+      const y = scales.y.scale(value);
+
+      shapes.push({
+        id: `${chart.id}_point_${seriesIndex}_${catIndex}`,
+        type: "ellipse",
+        left: x - pointSize / 2,
+        top: y - pointSize / 2,
+        width: pointSize,
+        height: pointSize,
+        fill: color,
+        stroke: theme.colors.background,
+        strokeWidth: 2,
+        elementTag: `point:${seriesIndex}:${catIndex}`,
+        chartId: chart.id,
+        layer: "data",
+      });
+    });
+  });
+
+  return shapes;
+}
+
+/**
+ * Generate themed legend shapes
+ */
+function generateThemedLegend(
+  chart: VectorChart,
+  layout: ChartLayout,
+  theme: VectorTheme
+): ShapeDescriptor[] {
+  const shapes: ShapeDescriptor[] = [];
+  const legendY = layout.legend?.top ?? layout.outer.top + layout.outer.height - 20;
+  const itemWidth = 100;
+
+  chart.series.slice(0, 4).forEach((series, index) => {
+    const x = layout.outer.left + index * itemWidth;
+    const color = getSeriesColor(theme, index);
+
+    // Color swatch
+    shapes.push({
+      id: `${chart.id}_legend_swatch_${index}`,
+      type: "rectangle",
+      left: x,
+      top: legendY,
+      width: 12,
+      height: 12,
+      fill: color,
+      stroke: color,
+      layer: "legend",
+    });
+
+    // Label
+    shapes.push({
+      id: `${chart.id}_legend_label_${index}`,
+      type: "textbox",
+      left: x + 16,
+      top: legendY - 2,
+      width: 80,
+      height: 16,
+      text: series.label,
+      fontSize: theme.fonts.labelSize,
+      layer: "legend",
+    });
+  });
+
+  return shapes;
+}
+
+/**
+ * Generate bar/column chart shapes (legacy, uses default colors)
  */
 function generateBarShapes(
   chart: VectorChart,

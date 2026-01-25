@@ -484,6 +484,14 @@ export function chartDataToVectorChart(
   // Preserve the original ID
   chart.id = data.id;
 
+  // For waterfall charts, mark "Total" categories
+  if (chartType === "waterfall") {
+    chart.categories = chart.categories.map((cat) => ({
+      ...cat,
+      isTotal: cat.label.toLowerCase().includes("total"),
+    }));
+  }
+
   return chart;
 }
 

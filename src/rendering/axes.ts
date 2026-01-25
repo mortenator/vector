@@ -9,9 +9,19 @@
  * - Grid lines
  */
 
-import { Axis, VectorChart } from "../types/vectorChart";
+import { Axis, AxisBreak, VectorChart } from "../types/vectorChart";
 import { ChartLayout, Scale, BandScale, calculateTicks } from "./coordinates";
 import { ShapeDescriptor } from "./pipeline";
+
+/**
+ * Axis break visual styles
+ */
+export interface AxisBreakStyle {
+  width: number;
+  height: number;
+  color: string;
+  backgroundColor: string;
+}
 
 export interface AxisRenderOptions {
   showAxisLine?: boolean;
@@ -168,9 +178,10 @@ export function generateAxisShapes(
 ): ShapeDescriptor[] {
   const shapes: ShapeDescriptor[] = [];
 
-  // Only generate axes for bar/column/line charts
-  if (["bar", "column", "line", "area"].includes(chart.type)) {
-    shapes.push(...generateYAxisShapes(chart, layout, scales.y, options));
+  // Only generate axes for bar/column/line/waterfall charts
+  if (["bar", "column", "line", "area", "waterfall"].includes(chart.type)) {
+    // Use Y-axis with breaks if available
+    shapes.push(...generateYAxisWithBreaks(chart, layout, scales.y, options));
     shapes.push(...generateXAxisShapes(chart, layout, scales.x, options));
   }
 
@@ -232,4 +243,160 @@ export function calculateNiceAxisBounds(
   max = Math.ceil(max / step) * step;
 
   return { min, max, step };
+}
+
+// ============================================================================
+// Axis Break Rendering
+// ============================================================================
+
+const defaultBreakStyle: AxisBreakStyle = {
+  width: 20,
+  height: 12,
+  color: "#9ca3af",
+  backgroundColor: "#f8fafc",
+};
+
+/**
+ * Generate axis break shapes (zigzag pattern)
+ */
+export function generateAxisBreakShapes(
+  chart: VectorChart,
+  layout: ChartLayout,
+  yScale: Scale,
+  axisBreak: AxisBreak,
+  style: AxisBreakStyle = defaultBreakStyle
+): ShapeDescriptor[] {
+  const shapes: ShapeDescriptor[] = [];
+
+  // Calculate the Y position for the break (center of the break range)
+  const breakCenterValue = (axisBreak.startValue + axisBreak.endValue) / 2;
+  const breakY = yScale.scale(breakCenterValue);
+
+  // Skip if break is outside visible range
+  if (breakY < layout.plot.top || breakY > layout.plot.top + layout.plot.height) {
+    return shapes;
+  }
+
+  const breakLeft = layout.plot.left - 10;
+  const breakTop = breakY - style.height / 2;
+
+  if (axisBreak.style === "wiggle") {
+    // Zigzag/wiggle pattern - create with small rectangles
+    const zigzagWidth = style.width;
+    const zigzagHeight = style.height;
+    const segments = 4;
+    const segmentWidth = zigzagWidth / segments;
+
+    // Background to cover axis line
+    shapes.push({
+      id: `${chart.id}_break_bg_${axisBreak.id}`,
+      type: "rectangle",
+      left: breakLeft - 2,
+      top: breakTop - 2,
+      width: zigzagWidth + 4,
+      height: zigzagHeight + 4,
+      fill: style.backgroundColor,
+      stroke: style.backgroundColor,
+      layer: "axis",
+    });
+
+    // Create zigzag with small angled rectangles
+    for (let i = 0; i < segments; i++) {
+      const isUp = i % 2 === 0;
+      const x = breakLeft + i * segmentWidth;
+      const y1 = isUp ? breakTop : breakTop + zigzagHeight;
+      const y2 = isUp ? breakTop + zigzagHeight : breakTop;
+
+      shapes.push({
+        id: `${chart.id}_break_zig_${axisBreak.id}_${i}`,
+        type: "rectangle",
+        left: x,
+        top: Math.min(y1, y2) + zigzagHeight / 4,
+        width: segmentWidth,
+        height: 2,
+        fill: style.color,
+        stroke: style.color,
+        layer: "axis",
+      });
+    }
+  } else {
+    // Straight break - two parallel lines
+    shapes.push({
+      id: `${chart.id}_break_bg_${axisBreak.id}`,
+      type: "rectangle",
+      left: breakLeft - 2,
+      top: breakTop - 2,
+      width: style.width + 4,
+      height: style.height + 4,
+      fill: style.backgroundColor,
+      stroke: style.backgroundColor,
+      layer: "axis",
+    });
+
+    // Top line
+    shapes.push({
+      id: `${chart.id}_break_top_${axisBreak.id}`,
+      type: "rectangle",
+      left: breakLeft,
+      top: breakTop,
+      width: style.width,
+      height: 2,
+      fill: style.color,
+      stroke: style.color,
+      layer: "axis",
+    });
+
+    // Bottom line
+    shapes.push({
+      id: `${chart.id}_break_bottom_${axisBreak.id}`,
+      type: "rectangle",
+      left: breakLeft,
+      top: breakTop + style.height - 2,
+      width: style.width,
+      height: 2,
+      fill: style.color,
+      stroke: style.color,
+      layer: "axis",
+    });
+  }
+
+  return shapes;
+}
+
+/**
+ * Generate Y-axis shapes with axis breaks
+ */
+export function generateYAxisWithBreaks(
+  chart: VectorChart,
+  layout: ChartLayout,
+  yScale: Scale,
+  options: AxisRenderOptions = {}
+): ShapeDescriptor[] {
+  const shapes = generateYAxisShapes(chart, layout, yScale, options);
+
+  // Add axis break visuals
+  const yAxis = chart.axes.find((a) => a.orientation === "y");
+  if (yAxis?.breaks && yAxis.breaks.length > 0) {
+    for (const axisBreak of yAxis.breaks) {
+      shapes.push(...generateAxisBreakShapes(chart, layout, yScale, axisBreak));
+    }
+  }
+
+  return shapes;
+}
+
+/**
+ * Create an axis break helper
+ */
+export function createAxisBreak(
+  startValue: number,
+  endValue: number,
+  style: "wiggle" | "straight" = "wiggle"
+): AxisBreak {
+  return {
+    id: `break_${Date.now()}`,
+    startValue,
+    endValue,
+    style,
+  };
 }

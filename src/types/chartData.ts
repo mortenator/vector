@@ -2,7 +2,7 @@
  * Type definitions for chart data management
  */
 
-export type ChartType = "bar" | "column" | "line" | "pie";
+export type ChartType = "bar" | "column" | "line" | "pie" | "waterfall";
 
 export interface ChartSeries {
   name: string;
@@ -30,6 +30,16 @@ export interface StoredChartData {
  * Default sample data for new charts
  */
 export function createDefaultChartData(type: ChartType = "bar"): ChartData {
+  if (type === "waterfall") {
+    // Waterfall chart uses single series with running total
+    return {
+      id: generateId(),
+      type,
+      categories: ["Start", "Product A", "Product B", "Costs", "Total"],
+      series: [{ name: "Revenue", values: [100, 50, 30, -40, 0] }],
+    };
+  }
+
   return {
     id: generateId(),
     type,

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
-import { Axis, ScaleType } from "../types/vectorChart";
+import { Axis, AxisBreak, ScaleType } from "../types/vectorChart";
+import { createAxisBreak } from "../rendering/axes";
 
 interface AxisPanelProps {
   axis: Axis;
@@ -119,6 +120,14 @@ const AxisPanel: React.FC<AxisPanelProps> = ({ axis, label, onChange }) => {
             </label>
           </div>
 
+          {/* Axis Breaks */}
+          {axis.orientation === "y" && (
+            <AxisBreakEditor
+              breaks={localAxis.breaks || []}
+              onChange={(breaks) => handleChange({ breaks })}
+            />
+          )}
+
           {/* Reset Button */}
           <button
             onClick={() =>
@@ -178,6 +187,149 @@ export const AxisConfiguration: React.FC<AxisConfigurationProps> = ({
       {!yAxis && !xAxis && (
         <p className="text-xs text-gray-500 italic">
           No axes configured for this chart type.
+        </p>
+      )}
+    </div>
+  );
+};
+
+// ============================================================================
+// Axis Break Editor
+// ============================================================================
+
+interface AxisBreakEditorProps {
+  breaks: AxisBreak[];
+  onChange: (breaks: AxisBreak[]) => void;
+}
+
+const AxisBreakEditor: React.FC<AxisBreakEditorProps> = ({
+  breaks,
+  onChange,
+}) => {
+  const [showAddForm, setShowAddForm] = useState(false);
+  const [startValue, setStartValue] = useState("");
+  const [endValue, setEndValue] = useState("");
+  const [style, setStyle] = useState<"wiggle" | "straight">("wiggle");
+
+  const handleAddBreak = () => {
+    const start = parseFloat(startValue);
+    const end = parseFloat(endValue);
+    if (isNaN(start) || isNaN(end) || start >= end) return;
+
+    const newBreak = createAxisBreak(start, end, style);
+    onChange([...breaks, newBreak]);
+    setStartValue("");
+    setEndValue("");
+    setShowAddForm(false);
+  };
+
+  const handleRemoveBreak = (id: string) => {
+    onChange(breaks.filter((b) => b.id !== id));
+  };
+
+  return (
+    <div className="border-t pt-3 mt-3">
+      <label className="block text-xs font-medium text-gray-600 mb-2">
+        Axis Breaks
+      </label>
+
+      {/* Existing breaks */}
+      {breaks.length > 0 && (
+        <div className="space-y-1 mb-2">
+          {breaks.map((b) => (
+            <div
+              key={b.id}
+              className="flex items-center justify-between p-2 bg-gray-50 rounded text-xs"
+            >
+              <span>
+                {b.startValue} → {b.endValue} ({b.style})
+              </span>
+              <button
+                onClick={() => handleRemoveBreak(b.id)}
+                className="text-gray-400 hover:text-red-500"
+              >
+                <svg
+                  className="w-4 h-4"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M6 18L18 6M6 6l12 12"
+                  />
+                </svg>
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Add break form */}
+      {showAddForm ? (
+        <div className="space-y-2 p-2 bg-blue-50 rounded">
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <label className="block text-xs text-gray-500 mb-1">From</label>
+              <input
+                type="number"
+                value={startValue}
+                onChange={(e) => setStartValue(e.target.value)}
+                placeholder="Start"
+                className="w-full px-2 py-1 text-xs border border-gray-300 rounded"
+              />
+            </div>
+            <div>
+              <label className="block text-xs text-gray-500 mb-1">To</label>
+              <input
+                type="number"
+                value={endValue}
+                onChange={(e) => setEndValue(e.target.value)}
+                placeholder="End"
+                className="w-full px-2 py-1 text-xs border border-gray-300 rounded"
+              />
+            </div>
+          </div>
+          <div>
+            <label className="block text-xs text-gray-500 mb-1">Style</label>
+            <select
+              value={style}
+              onChange={(e) => setStyle(e.target.value as "wiggle" | "straight")}
+              className="w-full px-2 py-1 text-xs border border-gray-300 rounded"
+            >
+              <option value="wiggle">Zigzag</option>
+              <option value="straight">Straight</option>
+            </select>
+          </div>
+          <div className="flex gap-2">
+            <button
+              onClick={handleAddBreak}
+              className="flex-1 py-1 text-xs bg-blue-600 text-white rounded hover:bg-blue-700"
+            >
+              Add Break
+            </button>
+            <button
+              onClick={() => setShowAddForm(false)}
+              className="px-3 py-1 text-xs text-gray-600 hover:text-gray-800"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      ) : (
+        <button
+          onClick={() => setShowAddForm(true)}
+          className="w-full py-1.5 text-xs text-blue-600 border border-blue-300 rounded hover:bg-blue-50"
+        >
+          + Add Axis Break
+        </button>
+      )}
+
+      {breaks.length === 0 && !showAddForm && (
+        <p className="text-xs text-gray-400 italic mt-1">
+          Breaks hide a range of values to focus on relevant data.
         </p>
       )}
     </div>
