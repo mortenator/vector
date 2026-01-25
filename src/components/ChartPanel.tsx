@@ -1,10 +1,18 @@
 import React, { useState, useEffect } from "react";
-import { insertChart, insertChartV2, ChartType } from "../utils/chartUtils";
+import {
+  insertChart,
+  insertChartV2,
+  ChartType,
+  insertVectorChart,
+  chartDataToVectorChart,
+} from "../utils/chartUtils";
 import { ChartData, createDefaultChartData } from "../types/chartData";
+import { Axis, createAxis } from "../types/vectorChart";
 import { updateChartPersistent } from "../utils/dataStorage";
 import { ChartSelection } from "../utils/selectionManager";
 import { EditorMode } from "../taskpane/App";
 import DataGrid from "./DataGrid";
+import { AxisConfiguration } from "./AxisPanel";
 
 interface ChartPanelProps {
   isLoading: boolean;
@@ -86,12 +94,19 @@ const ChartPanel: React.FC<ChartPanelProps> = ({
   const [chartData, setChartData] = useState<ChartData>(() =>
     createDefaultChartData("bar")
   );
+  const [axes, setAxes] = useState<Axis[]>(() => [
+    createAxis("category", "x"),
+    createAxis("value", "y"),
+  ]);
+  const [showAxisConfig, setShowAxisConfig] = useState(false);
 
   // Load selected chart data when selection changes
   useEffect(() => {
     if (mode === "edit" && selectedChart) {
       setChartData(selectedChart.chartData);
       setSelectedChartType(selectedChart.chartData.type);
+      // Reset axes for now - TODO: load from stored VectorChart
+      setAxes([createAxis("category", "x"), createAxis("value", "y")]);
     }
   }, [mode, selectedChart]);
 
@@ -114,8 +129,15 @@ const ChartPanel: React.FC<ChartPanelProps> = ({
         id: `chart_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
       };
 
-      // Use new rendering pipeline
-      await insertChartV2(selectedChartType, dataToInsert);
+      // Convert to VectorChart and apply axis configuration
+      const vectorChart = chartDataToVectorChart(
+        dataToInsert,
+        selectedChartType as any
+      );
+      vectorChart.axes = axes;
+
+      // Use new rendering pipeline with VectorChart
+      await insertVectorChart(vectorChart);
 
       showMessage(
         `${selectedChartType.charAt(0).toUpperCase() + selectedChartType.slice(1)} chart inserted!`
@@ -211,6 +233,36 @@ const ChartPanel: React.FC<ChartPanelProps> = ({
           ))}
         </div>
       </section>
+
+      {/* Axis Configuration (collapsible) */}
+      {selectedChartType !== "pie" && (
+        <section className="bg-white rounded-xl border border-gray-200 p-3 shadow-sm">
+          <button
+            onClick={() => setShowAxisConfig(!showAxisConfig)}
+            className="w-full flex items-center justify-between text-sm font-semibold text-gray-700"
+          >
+            <span>Axis Settings</span>
+            <svg
+              className={`w-4 h-4 text-gray-500 transition-transform ${showAxisConfig ? "rotate-180" : ""}`}
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M19 9l-7 7-7-7"
+              />
+            </svg>
+          </button>
+          {showAxisConfig && (
+            <div className="mt-3">
+              <AxisConfiguration axes={axes} onChange={setAxes} />
+            </div>
+          )}
+        </section>
+      )}
 
       {/* Action Button */}
       <section>

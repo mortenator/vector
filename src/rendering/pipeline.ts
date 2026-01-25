@@ -23,6 +23,7 @@ import {
   Scale,
   BandScale,
 } from "./coordinates";
+import { generateAxisShapes } from "./axes";
 
 // ============================================================================
 // Shape Descriptors
@@ -153,6 +154,9 @@ export function generateShapeDescriptors(
       layer: "label",
     });
   }
+
+  // Axes (grid lines, axis lines, tick marks, labels)
+  shapes.push(...generateAxisShapes(chart, layout, scales));
 
   // Generate data shapes based on chart type
   switch (chart.type) {
