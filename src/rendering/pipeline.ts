@@ -25,6 +25,7 @@ import {
 } from "./coordinates";
 import { generateAxisShapes } from "./axes";
 import { generateDataLabels, LabelConfig, defaultLabelConfig } from "./labelPlacement";
+import { generateAnnotationShapes, SimpleAnnotation } from "./annotations";
 
 // ============================================================================
 // Shape Descriptors
@@ -199,6 +200,38 @@ export function generateShapeDescriptorsWithLabels(
   // Add data labels if enabled
   if (labelConfig.showLabels) {
     shapes.push(...generateDataLabels(chart, layout, scales, labelConfig));
+  }
+
+  return shapes;
+}
+
+/**
+ * Render options including labels and annotations
+ */
+export interface RenderOptions {
+  labelConfig?: LabelConfig;
+  annotations?: SimpleAnnotation[];
+}
+
+/**
+ * Generate all shape descriptors with full options
+ */
+export function generateShapeDescriptorsWithOptions(
+  chart: VectorChart,
+  layout: ChartLayout,
+  scales: ChartScales,
+  options: RenderOptions
+): ShapeDescriptor[] {
+  const shapes = generateShapeDescriptors(chart, layout, scales);
+
+  // Add data labels if enabled
+  if (options.labelConfig?.showLabels) {
+    shapes.push(...generateDataLabels(chart, layout, scales, options.labelConfig));
+  }
+
+  // Add annotations
+  if (options.annotations && options.annotations.length > 0) {
+    shapes.push(...generateAnnotationShapes(chart, layout, scales, options.annotations));
   }
 
   return shapes;
@@ -568,6 +601,34 @@ export async function renderChart(
   return applyShapesToSlide(shapes, descriptors, chart.id);
 }
 
+/**
+ * Render a VectorChart with full options (labels + annotations)
+ */
+export async function renderChartWithOptions(
+  shapes: PowerPoint.ShapeCollection,
+  chart: VectorChart,
+  options: RenderOptions
+): Promise<RenderResult> {
+  // Calculate layout
+  const layout = calculateLayout(chart.dimensions, {
+    showTitle: true,
+    showLegend: true,
+  });
+
+  // Calculate scales
+  const scales = calculateScales(chart, layout);
+
+  // Generate shape descriptors with options
+  const descriptors = generateShapeDescriptorsWithOptions(chart, layout, scales, options);
+
+  // Apply to PowerPoint
+  return applyShapesToSlide(shapes, descriptors, chart.id);
+}
+
 // Re-export label config types
 export type { LabelConfig } from "./labelPlacement";
 export { defaultLabelConfig } from "./labelPlacement";
+
+// Re-export annotation types
+export type { SimpleAnnotation, AnnotationConfig } from "./annotations";
+export { createValueLineAnnotation, createDiffArrowAnnotation } from "./annotations";

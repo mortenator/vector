@@ -3,7 +3,7 @@ import {
   insertChart,
   insertChartV2,
   ChartType,
-  insertVectorChartWithLabels,
+  insertVectorChartWithOptions,
   chartDataToVectorChart,
 } from "../utils/chartUtils";
 import { ChartData, createDefaultChartData } from "../types/chartData";
@@ -12,9 +12,11 @@ import { updateChartPersistent } from "../utils/dataStorage";
 import { ChartSelection } from "../utils/selectionManager";
 import { EditorMode } from "../taskpane/App";
 import { LabelConfig, defaultLabelConfig } from "../rendering/labelPlacement";
+import { SimpleAnnotation } from "../rendering/annotations";
 import DataGrid from "./DataGrid";
 import { AxisConfiguration } from "./AxisPanel";
 import LabelSettings from "./LabelSettings";
+import AnnotationPanel from "./AnnotationPanel";
 
 interface ChartPanelProps {
   isLoading: boolean;
@@ -101,8 +103,10 @@ const ChartPanel: React.FC<ChartPanelProps> = ({
     createAxis("value", "y"),
   ]);
   const [labelConfig, setLabelConfig] = useState<LabelConfig>(defaultLabelConfig);
+  const [annotations, setAnnotations] = useState<SimpleAnnotation[]>([]);
   const [showAxisConfig, setShowAxisConfig] = useState(false);
   const [showLabelConfig, setShowLabelConfig] = useState(false);
+  const [showAnnotations, setShowAnnotations] = useState(false);
 
   // Load selected chart data when selection changes
   useEffect(() => {
@@ -140,8 +144,11 @@ const ChartPanel: React.FC<ChartPanelProps> = ({
       );
       vectorChart.axes = axes;
 
-      // Use new rendering pipeline with VectorChart and labels
-      await insertVectorChartWithLabels(vectorChart, labelConfig);
+      // Use new rendering pipeline with VectorChart, labels, and annotations
+      await insertVectorChartWithOptions(vectorChart, {
+        labelConfig,
+        annotations,
+      });
 
       showMessage(
         `${selectedChartType.charAt(0).toUpperCase() + selectedChartType.slice(1)} chart inserted!`
@@ -300,6 +307,47 @@ const ChartPanel: React.FC<ChartPanelProps> = ({
           {showLabelConfig && (
             <div className="mt-3">
               <LabelSettings config={labelConfig} onChange={setLabelConfig} />
+            </div>
+          )}
+        </section>
+      )}
+
+      {/* Annotations (collapsible) */}
+      {selectedChartType !== "pie" && (
+        <section className="bg-white rounded-xl border border-gray-200 p-3 shadow-sm">
+          <button
+            onClick={() => setShowAnnotations(!showAnnotations)}
+            className="w-full flex items-center justify-between text-sm font-semibold text-gray-700"
+          >
+            <div className="flex items-center gap-2">
+              <span>Annotations</span>
+              {annotations.length > 0 && (
+                <span className="text-xs bg-purple-100 text-purple-600 px-2 py-0.5 rounded-full">
+                  {annotations.filter((a) => a.enabled).length}
+                </span>
+              )}
+            </div>
+            <svg
+              className={`w-4 h-4 text-gray-500 transition-transform ${showAnnotations ? "rotate-180" : ""}`}
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M19 9l-7 7-7-7"
+              />
+            </svg>
+          </button>
+          {showAnnotations && (
+            <div className="mt-3">
+              <AnnotationPanel
+                chartData={chartData}
+                annotations={annotations}
+                onChange={setAnnotations}
+              />
             </div>
           )}
         </section>

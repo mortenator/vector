@@ -13,7 +13,13 @@ import {
   saveChartPersistent,
   tagShapeWithChartId,
 } from "./dataStorage";
-import { renderChart, RenderResult, LabelConfig } from "../rendering/pipeline";
+import {
+  renderChart,
+  renderChartWithOptions,
+  RenderResult,
+  LabelConfig,
+  RenderOptions,
+} from "../rendering/pipeline";
 
 // Re-export ChartType for backwards compatibility
 export type { ChartType } from "../types/chartData";
@@ -559,6 +565,40 @@ export async function insertVectorChartWithLabels(
 
     // Render using new pipeline with labels
     const result: RenderResult = await renderChart(shapes, chart, labelConfig);
+
+    // Tag the background shape with chart ID
+    if (result.backgroundShape) {
+      await tagShapeWithChartId(result.backgroundShape, chart.id);
+    }
+
+    // Persist chart data
+    await saveChartPersistent(vectorChartToChartData(chart));
+
+    await context.sync();
+  });
+}
+
+/**
+ * Insert a VectorChart with full render options (labels + annotations)
+ */
+export async function insertVectorChartWithOptions(
+  chart: VectorChart,
+  options: RenderOptions
+): Promise<void> {
+  return PowerPoint.run(async (context) => {
+    const slides = context.presentation.slides;
+    slides.load("items");
+    await context.sync();
+
+    if (slides.items.length === 0) {
+      throw new Error("No slides in presentation");
+    }
+
+    const slide = slides.items[0];
+    const shapes = slide.shapes;
+
+    // Render using new pipeline with full options
+    const result: RenderResult = await renderChartWithOptions(shapes, chart, options);
 
     // Tag the background shape with chart ID
     if (result.backgroundShape) {
