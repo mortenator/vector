@@ -3,7 +3,7 @@ import {
   insertChart,
   insertChartV2,
   ChartType,
-  insertVectorChart,
+  insertVectorChartWithLabels,
   chartDataToVectorChart,
 } from "../utils/chartUtils";
 import { ChartData, createDefaultChartData } from "../types/chartData";
@@ -11,8 +11,10 @@ import { Axis, createAxis } from "../types/vectorChart";
 import { updateChartPersistent } from "../utils/dataStorage";
 import { ChartSelection } from "../utils/selectionManager";
 import { EditorMode } from "../taskpane/App";
+import { LabelConfig, defaultLabelConfig } from "../rendering/labelPlacement";
 import DataGrid from "./DataGrid";
 import { AxisConfiguration } from "./AxisPanel";
+import LabelSettings from "./LabelSettings";
 
 interface ChartPanelProps {
   isLoading: boolean;
@@ -98,7 +100,9 @@ const ChartPanel: React.FC<ChartPanelProps> = ({
     createAxis("category", "x"),
     createAxis("value", "y"),
   ]);
+  const [labelConfig, setLabelConfig] = useState<LabelConfig>(defaultLabelConfig);
   const [showAxisConfig, setShowAxisConfig] = useState(false);
+  const [showLabelConfig, setShowLabelConfig] = useState(false);
 
   // Load selected chart data when selection changes
   useEffect(() => {
@@ -136,8 +140,8 @@ const ChartPanel: React.FC<ChartPanelProps> = ({
       );
       vectorChart.axes = axes;
 
-      // Use new rendering pipeline with VectorChart
-      await insertVectorChart(vectorChart);
+      // Use new rendering pipeline with VectorChart and labels
+      await insertVectorChartWithLabels(vectorChart, labelConfig);
 
       showMessage(
         `${selectedChartType.charAt(0).toUpperCase() + selectedChartType.slice(1)} chart inserted!`
@@ -259,6 +263,43 @@ const ChartPanel: React.FC<ChartPanelProps> = ({
           {showAxisConfig && (
             <div className="mt-3">
               <AxisConfiguration axes={axes} onChange={setAxes} />
+            </div>
+          )}
+        </section>
+      )}
+
+      {/* Label Settings (collapsible) */}
+      {selectedChartType !== "pie" && (
+        <section className="bg-white rounded-xl border border-gray-200 p-3 shadow-sm">
+          <button
+            onClick={() => setShowLabelConfig(!showLabelConfig)}
+            className="w-full flex items-center justify-between text-sm font-semibold text-gray-700"
+          >
+            <div className="flex items-center gap-2">
+              <span>Data Labels</span>
+              {labelConfig.showLabels && (
+                <span className="text-xs bg-blue-100 text-blue-600 px-2 py-0.5 rounded-full">
+                  On
+                </span>
+              )}
+            </div>
+            <svg
+              className={`w-4 h-4 text-gray-500 transition-transform ${showLabelConfig ? "rotate-180" : ""}`}
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M19 9l-7 7-7-7"
+              />
+            </svg>
+          </button>
+          {showLabelConfig && (
+            <div className="mt-3">
+              <LabelSettings config={labelConfig} onChange={setLabelConfig} />
             </div>
           )}
         </section>

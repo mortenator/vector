@@ -13,7 +13,7 @@ import {
   saveChartPersistent,
   tagShapeWithChartId,
 } from "./dataStorage";
-import { renderChart, RenderResult } from "../rendering/pipeline";
+import { renderChart, RenderResult, LabelConfig } from "../rendering/pipeline";
 
 // Re-export ChartType for backwards compatibility
 export type { ChartType } from "../types/chartData";
@@ -536,4 +536,38 @@ export async function insertChartV2(
 ): Promise<void> {
   const vectorChart = chartDataToVectorChart(data, chartType as VectorChartType);
   return insertVectorChart(vectorChart);
+}
+
+/**
+ * Insert a VectorChart with label configuration
+ */
+export async function insertVectorChartWithLabels(
+  chart: VectorChart,
+  labelConfig?: LabelConfig
+): Promise<void> {
+  return PowerPoint.run(async (context) => {
+    const slides = context.presentation.slides;
+    slides.load("items");
+    await context.sync();
+
+    if (slides.items.length === 0) {
+      throw new Error("No slides in presentation");
+    }
+
+    const slide = slides.items[0];
+    const shapes = slide.shapes;
+
+    // Render using new pipeline with labels
+    const result: RenderResult = await renderChart(shapes, chart, labelConfig);
+
+    // Tag the background shape with chart ID
+    if (result.backgroundShape) {
+      await tagShapeWithChartId(result.backgroundShape, chart.id);
+    }
+
+    // Persist chart data
+    await saveChartPersistent(vectorChartToChartData(chart));
+
+    await context.sync();
+  });
 }

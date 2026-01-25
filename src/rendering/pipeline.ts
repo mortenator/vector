@@ -24,6 +24,7 @@ import {
   BandScale,
 } from "./coordinates";
 import { generateAxisShapes } from "./axes";
+import { generateDataLabels, LabelConfig, defaultLabelConfig } from "./labelPlacement";
 
 // ============================================================================
 // Shape Descriptors
@@ -179,6 +180,25 @@ export function generateShapeDescriptors(
   // Legend
   if (layout.legend) {
     shapes.push(...generateLegend(chart, layout));
+  }
+
+  return shapes;
+}
+
+/**
+ * Generate all shape descriptors for a chart with label configuration
+ */
+export function generateShapeDescriptorsWithLabels(
+  chart: VectorChart,
+  layout: ChartLayout,
+  scales: ChartScales,
+  labelConfig: LabelConfig
+): ShapeDescriptor[] {
+  const shapes = generateShapeDescriptors(chart, layout, scales);
+
+  // Add data labels if enabled
+  if (labelConfig.showLabels) {
+    shapes.push(...generateDataLabels(chart, layout, scales, labelConfig));
   }
 
   return shapes;
@@ -527,7 +547,8 @@ export async function applyShapesToSlide(
  */
 export async function renderChart(
   shapes: PowerPoint.ShapeCollection,
-  chart: VectorChart
+  chart: VectorChart,
+  labelConfig?: LabelConfig
 ): Promise<RenderResult> {
   // Calculate layout
   const layout = calculateLayout(chart.dimensions, {
@@ -538,9 +559,15 @@ export async function renderChart(
   // Calculate scales
   const scales = calculateScales(chart, layout);
 
-  // Generate shape descriptors
-  const descriptors = generateShapeDescriptors(chart, layout, scales);
+  // Generate shape descriptors (with or without labels)
+  const descriptors = labelConfig
+    ? generateShapeDescriptorsWithLabels(chart, layout, scales, labelConfig)
+    : generateShapeDescriptors(chart, layout, scales);
 
   // Apply to PowerPoint
   return applyShapesToSlide(shapes, descriptors, chart.id);
 }
+
+// Re-export label config types
+export type { LabelConfig } from "./labelPlacement";
+export { defaultLabelConfig } from "./labelPlacement";
